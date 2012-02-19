@@ -5,11 +5,11 @@ use warnings;
 use POSIX qw(_exit setsid setuid setgid getuid getgid);
 use File::Spec;
 
-our $VERSION = '0.000004'; # 0.0.4
+our $VERSION = '0.000005'; # 0.0.5
 $VERSION = eval $VERSION;
 
 my @accessors = qw(
-    pid color_map name program program_args 
+    pid color_map name program program_args directory
     uid path gid scan_name stdout_file stderr_file pid_file fork data 
     lsb_start lsb_stop lsb_sdesc lsb_desc redirect_before_fork
 );
@@ -113,6 +113,9 @@ sub _fork {
 
 sub _launch_program {
     my ($self) = @_;
+    
+    chdir( $self->directory ) if $self->directory;
+
     if ( ref $self->program eq 'CODE' ) {
         $self->program->( $self, @{$self->program_args || []} );
     } else {
@@ -177,7 +180,7 @@ sub do_start {
 
     # Make sure the PID file exists.
     if ( ! -f $self->pid_file ) {
-        $self->pid( "_" ); # Make PID invalid.
+        $self->pid( 0 ); # Make PID invalid.
         $self->write_pid();
     }
     
@@ -274,12 +277,12 @@ sub dump_init_script {
     $self->data( $self->run_template(
         $self->data,
         {
-            NAME                => $self->name,
-            REQUIRED_START      => $self->lsb_start,
-            REQUIRED_STOP       => $self->lsb_stop,
-            SHORT_DESCRIPTION   => $self->lsb_sdesc,
-            DESCRIPTION         => $self->lsb_desc,
-            SCRIPT              => $self->path ? $self->path : $0,
+            NAME              => $self->name      ? $self->name      : "",
+            REQUIRED_START    => $self->lsb_start ? $self->lsb_start : "",
+            REQUIRED_STOP     => $self->lsb_stop  ? $self->lsb_stop  : "",
+            SHORT_DESCRIPTION => $self->lsb_sdesc ? $self->lsb_sdesc : "",
+            DESCRIPTION       => $self->lsb_desc  ? $self->lsb_desc  : "",
+            SCRIPT            => $self->path      ? $self->path      : $0,
         }
     ));
     print $self->data;
@@ -397,9 +400,9 @@ You can also make an LSB compatable init script:
 
     /home/symkat/etc/init.d/program get_init_file > /etc/init.d/program
 
-=head1 CONSTRUCTURE
+=head1 CONSTRUCTOR
 
-The constucture takes the following arguments.
+The constuctor takes the following arguments.
 
 =head2 name
 
@@ -444,6 +447,10 @@ ONLY supported in double-fork mode and will only work if you are running
 as root.  This takes the numerical GID ( grep group /etc/groups )
 
 $daemon->gid( 1001 );
+
+=head2 directory
+
+If provided, chdir to this directory before execution.
 
 =head2 path
 
@@ -617,7 +624,7 @@ SymKat I<E<lt>symkat@symkat.comE<gt>> ( Blog: L<http://symkat.com/> )
 
 =head2 CONTRIBUTORS
 
-Matt S. Trout (mst) I<E<lt>mst@mst@shadowcat.co.ukE<gt>>
+Matt S. Trout (mst) I<E<lt>mst@shadowcat.co.ukE<gt>>
 
 =head1 COPYRIGHT
 
