@@ -10,14 +10,13 @@ Daemon::Control->new({
     lsb_sdesc   => 'My Daemon Short',
     lsb_desc    => 'My Daemon controls the My Daemon daemon.',
     path        => '/usr/sbin/mydaemon/init.pl',
+    init_config => '/etc/default/my_program',
 
-    program     => sub { sleep $_[1] },
+    program     => sub { sleep shift },
     program_args => [ 10 ],
 
-    pid_file    => 'pid_tmp',
+    pid_file    => '/tmp/mydaemon.pid',
     stderr_file => '/dev/null',
     stdout_file => '/dev/null',
-
-    fork        => 2,
 
 })->run;

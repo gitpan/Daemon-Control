@@ -4,14 +4,15 @@ use strict;
 use warnings;
 use POSIX qw(_exit setsid setuid setgid getuid getgid);
 use File::Spec;
+require 5.008001; # Supporting 5.8.1+
 
-our $VERSION = '0.000005'; # 0.0.5
+our $VERSION = '0.000006'; # 0.0.6
 $VERSION = eval $VERSION;
 
 my @accessors = qw(
     pid color_map name program program_args directory
     uid path gid scan_name stdout_file stderr_file pid_file fork data 
-    lsb_start lsb_stop lsb_sdesc lsb_desc redirect_before_fork
+    lsb_start lsb_stop lsb_sdesc lsb_desc redirect_before_fork init_config
 );
 
 # Accessor building
@@ -42,10 +43,40 @@ sub new {
             $self->{$accessor} = delete $args->{$accessor};
         }
     }
+
+    # Get numeric uid/gid if we were given strings
+    $self->_resolve_guid_strings;
+
     die "Unknown arguments to the constructor: " . join( " ", keys %$args )
         if keys( %$args );
 
     return $self;
+}
+
+# Given a ->uid or ->gid with strings, locate the
+# current uid/gid number for the user/group.
+#
+# Dies on failure.
+sub _resolve_guid_strings {
+    my ( $self ) = @_;
+
+    if ( $self->uid && $self->uid =~ /[a-z]/ ) {
+        my $uid = getpwnam( $self->uid );
+
+        die "Error: Couldn't get a UID for " . $self->uid . ", user exists?"
+            unless $uid;
+
+        $self->uid( $uid );
+    }
+    
+    if ( $self->gid && $self->gid =~ /[a-z]/ ) {
+        my $gid = getgrnam( $self->gid );
+
+        die "Error: Couldn't get a GID for " . $self->gid . ", group exists?"
+            unless $gid;
+
+        $self->gid( $gid );
+    }
 }
 
 sub redirect_filehandles {
@@ -128,6 +159,33 @@ sub _launch_program {
 
 sub write_pid {
     my ( $self ) = @_;
+
+    # We're going to fork a process to do this,
+    # and change our UID/GID to the target.  This
+    # should prevent the issue of creating a PID file
+    # as root and then moving our permissions down and
+    # failing to read it.
+    
+    if ( $self->uid ) {
+        my $session = fork();
+        if ( $session == 0 ) {
+            setuid($self->uid);
+            setgid($self->gid);
+            $self->_write_pid;
+            _exit 0;
+        } elsif ( not defined $session ) {
+            print STDERR "Cannot fork to write PID: $!\n";
+        } else {
+            #waitpid($session, 0);
+            # Let the parent do nothing.
+        }
+    } else {
+        $self->_write_pid;
+    }
+}
+
+sub _write_pid {
+    my ( $self ) = @_;
     open my $sf, ">", $self->pid_file
         or die "Failed to write " . $self->pid_file . ": $!";
     print $sf $self->pid;
@@ -137,6 +195,15 @@ sub write_pid {
 
 sub read_pid {
     my ( $self ) = @_;
+
+    # If we don't have a PID file, we're going to set it
+    # to 0 -- this will prevent killing normal processes,
+    # and make is_running return false.
+    if ( ! -f $self->pid_file ) {
+        $self->pid( 0 );
+        return 0;
+    }
+
     open my $lf, "<", $self->pid_file 
         or die "Failed to read " . $self->pid_file . ": $!";
     my $pid = do { local $/; <$lf> };
@@ -218,8 +285,9 @@ sub do_stop {
     my ( $self ) = @_;
 
     $self->read_pid;
+
     if ( $self->pid && $self->pid_running ) {
-        foreach my $signal ( qw(INT TERM TERM KILL) ) {
+        foreach my $signal ( qw(TERM TERM INT KILL) ) {
             kill $signal => $self->pid;
             sleep 1;
             last unless $self->pid_running;
@@ -229,11 +297,12 @@ sub do_stop {
             exit 1;
         }
         $self->pretty_print( "Stopped" );
-        exit 0;
     } else {
         $self->pretty_print( "Not Running", "red" );
-        exit 0;
     }
+
+    # Clean up the PID file on stop.
+    unlink($self->pid_file) if $self->pid_file; 
 }
 
 sub do_restart {
@@ -252,10 +321,8 @@ sub do_status {
 
     if ( $self->pid && $self->pid_running ) {
         $self->pretty_print( "Running" );
-        exit 0;
     } else {
         $self->pretty_print( "Not Running", "red" );
-        exit 1;
     }
 }
 
@@ -274,6 +341,15 @@ sub dump_init_script {
         $self->data( $data );
     }
 
+    # So, instead of expanding run_template to use a real DSL
+    # or making TT a dependancy, I'm just going to fake template
+    # IF logic.
+    my $init_source_file = $self->init_config
+        ? $self->run_template( 
+            '[ -r [% FILE %] ] && . [% FILE %]',  
+            { FILE => $self->init_config } )
+        : "";
+
     $self->data( $self->run_template(
         $self->data,
         {
@@ -283,6 +359,7 @@ sub dump_init_script {
             SHORT_DESCRIPTION => $self->lsb_sdesc ? $self->lsb_sdesc : "",
             DESCRIPTION       => $self->lsb_desc  ? $self->lsb_desc  : "",
             SCRIPT            => $self->path      ? $self->path      : $0,
+            INIT_SOURCE_FILE  => $init_source_file,
         }
     ));
     print $self->data;
@@ -339,12 +416,13 @@ __DATA__
 # Description:       [% DESCRIPTION %]
 ### END INIT INFO`
 
+[% INIT_SOURCE_FILE %]
 
 if [ -x [% SCRIPT %] ];
 then
     [% SCRIPT %] $1
 else
-    echo "Requred program [% SCRIPT %] not found!"
+    echo "Required program [% SCRIPT %] not found!"
     exit 1;
 fi
 __END__
@@ -436,17 +514,19 @@ $daemon->program_args( [ '--switch', 'argument' ] );
 
 If provided, the UID that the program will drop to when forked.  This is
 ONLY supported in double-fork mode and will only work if you are running
-as root.  This takes the numerical UID (grep user /etc/passwd )
+as root. Accepts numeric UID, or finds it if given a username as a string.
 
 $daemon->uid( 1001 );
+$daemon->uid('www-data');
 
 =head2 gid
 
 If provided, the GID that the program will drop to when forked.  This is
 ONLY supported in double-fork mode and will only work if you are running
-as root.  This takes the numerical GID ( grep group /etc/groups )
+as root. Accepts numeric GID, or finds it if given a group name as a string.
 
 $daemon->gid( 1001 );
+$daemon->gid('www-data');
 
 =head2 directory
 
@@ -458,6 +538,14 @@ The path of the script you are using Daemon::Control in.  This will be used in
 the LSB file genration to point it to the location of the script.  If this is
 not provided $0 will be used, which is likely to work only if you use the full
 path to execute it when asking for the init script.
+
+=head2 init_config
+
+The name of the init config file to load.  When provided your init script will
+source this file to include the environment variables.  This is useful for setting
+a PERL5LIB and such things.
+
+$daemon->init_config( "/etc/default/my_program" );
 
 =head2 redirect_before_fork
 
@@ -624,7 +712,13 @@ SymKat I<E<lt>symkat@symkat.comE<gt>> ( Blog: L<http://symkat.com/> )
 
 =head2 CONTRIBUTORS
 
-Matt S. Trout (mst) I<E<lt>mst@shadowcat.co.ukE<gt>>
+=over 4
+
+=item * Matt S. Trout (mst) I<E<lt>mst@shadowcat.co.ukE<gt>>
+
+=item * Mike Doherty (doherty) I<E<lt>doherty@cpan.orgE<gt>>
+
+=back
 
 =head1 COPYRIGHT
 

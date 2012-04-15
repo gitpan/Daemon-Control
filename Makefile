@@ -1,7 +1,7 @@
 # This Makefile is for the Daemon::Control extension to perl.
 #
 # It was generated automatically by MakeMaker version
-# 6.62 (Revision: 66200) from the contents of
+# 6.59 (Revision: 65900) from the contents of
 # Makefile.PL. Don't edit this file, edit Makefile.PL instead.
 #
 #       ANY CHANGES MADE HERE WILL BE LOST!
@@ -13,17 +13,17 @@
 
 #     ABSTRACT => q[Create init scripts in Perl]
 #     AUTHOR => [q[SymKat I<<symkat@symkat.com>> ( Blog: L<http://symkat.com/> )]]
-#     BUILD_REQUIRES => { ExtUtils::MakeMaker=>q[6.36] }
+#     BUILD_REQUIRES => {  }
 #     CONFIGURE_REQUIRES => {  }
+#     DIR => []
 #     DISTNAME => q[Daemon-Control]
-#     LICENSE => q[perl]
 #     NAME => q[Daemon::Control]
 #     NO_META => q[1]
-#     PREREQ_PM => { POSIX=>q[0], ExtUtils::MakeMaker=>q[6.36], File::Spec=>q[0] }
-#     VERSION => q[0.000005]
-#     VERSION_FROM => q[lib/Daemon/Control.pm]
+#     PL_FILES => {  }
+#     PREREQ_PM => { POSIX=>q[0], ExtUtils::MakeMaker=>q[6.59], File::Spec=>q[0] }
+#     VERSION => q[0.000006]
+#     clean => { FILES=>q[META.yml] }
 #     dist => { PREOP=>q[$(PERL) -I. "-MModule::Install::Admin" -e "dist_preop(q($(DISTVNAME)))"] }
-#     realclean => { FILES=>q[MYMETA.yml] }
 
 # --- MakeMaker post_initialize section:
 
@@ -41,16 +41,16 @@ DLSRC = dl_dlopen.xs
 EXE_EXT = 
 FULL_AR = /usr/bin/ar
 LD = cc
-LDDLFLAGS = -shared -O2 -g -L/usr/local/lib -fstack-protector
-LDFLAGS =  -fstack-protector -L/usr/local/lib
-LIBC = /lib/libc-2.11.2.so
+LDDLFLAGS = -shared -O2 -g -L/usr/local/lib
+LDFLAGS =  -L/usr/local/lib
+LIBC = /lib/libc-2.7.so
 LIB_EXT = .a
 OBJ_EXT = .o
 OSNAME = linux
-OSVERS = 2.6.32-5-amd64
+OSVERS = 2.6.30.5-dsa-amd64
 RANLIB = :
-SITELIBEXP = /usr/local/share/perl/5.10.1
-SITEARCHEXP = /usr/local/lib/perl/5.10.1
+SITELIBEXP = /usr/local/share/perl/5.10.0
+SITEARCHEXP = /usr/local/lib/perl/5.10.0
 SO = so
 VENDORARCHEXP = /usr/lib/perl5
 VENDORLIBEXP = /usr/share/perl5
@@ -62,11 +62,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = Daemon::Control
 NAME_SYM = Daemon_Control
-VERSION = 0.000005
+VERSION = 0.000006
 VERSION_MACRO = VERSION
-VERSION_SYM = 0_000005
+VERSION_SYM = 0_000006
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 0.000005
+XS_VERSION = 0.000006
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -140,8 +140,8 @@ PERM_RW = 644
 PERM_RWX = 755
 
 MAKEMAKER   = /home/symkat/perl5/lib/perl5/ExtUtils/MakeMaker.pm
-MM_VERSION  = 6.62
-MM_REVISION = 66200
+MM_VERSION  = 6.59
+MM_REVISION = 65900
 
 # FULLEXT = Pathname for extension directory (eg Foo/Bar/Oracle).
 # BASEEXT = Basename part of FULLEXT. May be just equal FULLEXT. (eg Oracle)
@@ -152,7 +152,7 @@ FULLEXT = Daemon/Control
 BASEEXT = Control
 PARENT_NAME = Daemon
 DLBASE = $(BASEEXT)
-VERSION_FROM = lib/Daemon/Control.pm
+VERSION_FROM = 
 OBJECT = 
 LDFROM = $(OBJECT)
 LINKTYPE = dynamic
@@ -193,7 +193,7 @@ PM_TO_BLIB = lib/Daemon/Control.pm \
 
 
 # --- MakeMaker platform_constants section:
-MM_Unix_VERSION = 6.62
+MM_Unix_VERSION = 6.59
 PERL_MALLOC_DEF = -DPERL_EXTMALLOC_DEF -Dmalloc=Perl_malloc -Dfree=Perl_mfree -Drealloc=Perl_realloc -Dcalloc=Perl_calloc
 
 
@@ -258,7 +258,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = Daemon-Control
-DISTVNAME = Daemon-Control-0.000005
+DISTVNAME = Daemon-Control-0.000006
 
 
 # --- MakeMaker macro section:
@@ -458,7 +458,7 @@ clean :: clean_subdirs
 	  perl.exe so_locations \
 	  $(BASEEXT).exp 
 	- $(RM_RF) \
-	  blib 
+	  META.yml blib 
 	- $(MV) $(FIRST_MAKEFILE) $(MAKEFILE_OLD) $(DEV_NULL)
 
 
@@ -473,7 +473,7 @@ realclean purge ::  clean realclean_subdirs
 	- $(RM_F) \
 	  $(MAKEFILE_OLD) $(FIRST_MAKEFILE) 
 	- $(RM_RF) \
-	  MYMETA.yml $(DISTVNAME) 
+	  $(DISTVNAME) 
 
 
 # --- MakeMaker metafile section:
@@ -772,10 +772,11 @@ testdb_static :: testdb_dynamic
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0.000005">' > $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0.000006">' > $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>Create init scripts in Perl</ABSTRACT>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>SymKat I&lt;&lt;symkat@symkat.com&gt;&gt; ( Blog: L&lt;http://symkat.com/&gt; )</AUTHOR>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '        <REQUIRE NAME="ExtUtils::MakeMaker" VERSION="6.59" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <REQUIRE NAME="File::Spec" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <REQUIRE NAME="POSIX::" />' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '        <ARCHITECTURE NAME="x86_64-linux-gnu-thread-multi-5.10" />' >> $(DISTNAME).ppd
@@ -799,14 +800,13 @@ pm_to_blib : $(FIRST_MAKEFILE) $(TO_INST_PM)
 
 
 # End.
-# Postamble by Module::Install 1.04
+# Postamble by Module::Install 0.76
 # --- Module::Install::Admin::Makefile section:
 
 realclean purge ::
 	$(RM_F) $(DISTVNAME).tar$(SUFFIX)
-	$(RM_F) MANIFEST.bak _build
-	$(PERL) "-Ilib" "-MModule::Install::Admin" -e "remove_meta()"
-	$(RM_RF) inc
+	$(RM_RF) inc MANIFEST.bak _build
+	$(PERL) -I. "-MModule::Install::Admin" -e "remove_meta()"
 
 reset :: purge
 

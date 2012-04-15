@@ -17,11 +17,13 @@ MYMETA.json
 MYMETA.yml
 t/00_load.t
 t/01_lsb_file.t
+t/01_lsb_file_with_init_config.t
 t/02_sleep_perl.t
 t/02_sleep_system.t
 t/03_perl_gets_control.t
 t/04_show_warnings.t
 t/bin/01_lsb.pl
+t/bin/01_lsb_02.pl
 t/bin/02_sleep_perl.pl
 t/bin/02_sleep_system.pl
 t/bin/03_perl_gets_control.pl
