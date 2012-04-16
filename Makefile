@@ -21,7 +21,7 @@
 #     NO_META => q[1]
 #     PL_FILES => {  }
 #     PREREQ_PM => { POSIX=>q[0], ExtUtils::MakeMaker=>q[6.59], File::Spec=>q[0] }
-#     VERSION => q[0.000006]
+#     VERSION => q[0.000007]
 #     clean => { FILES=>q[META.yml] }
 #     dist => { PREOP=>q[$(PERL) -I. "-MModule::Install::Admin" -e "dist_preop(q($(DISTVNAME)))"] }
 
@@ -62,11 +62,11 @@ DIRFILESEP = /
 DFSEP = $(DIRFILESEP)
 NAME = Daemon::Control
 NAME_SYM = Daemon_Control
-VERSION = 0.000006
+VERSION = 0.000007
 VERSION_MACRO = VERSION
-VERSION_SYM = 0_000006
+VERSION_SYM = 0_000007
 DEFINE_VERSION = -D$(VERSION_MACRO)=\"$(VERSION)\"
-XS_VERSION = 0.000006
+XS_VERSION = 0.000007
 XS_VERSION_MACRO = XS_VERSION
 XS_DEFINE_VERSION = -D$(XS_VERSION_MACRO)=\"$(XS_VERSION)\"
 INST_ARCHLIB = blib/arch
@@ -258,7 +258,7 @@ RCS_LABEL = rcs -Nv$(VERSION_SYM): -q
 DIST_CP = best
 DIST_DEFAULT = tardist
 DISTNAME = Daemon-Control
-DISTVNAME = Daemon-Control-0.000006
+DISTVNAME = Daemon-Control-0.000007
 
 
 # --- MakeMaker macro section:
@@ -772,7 +772,7 @@ testdb_static :: testdb_dynamic
 # --- MakeMaker ppd section:
 # Creates a PPD (Perl Package Description) for a binary distribution.
 ppd :
-	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0.000006">' > $(DISTNAME).ppd
+	$(NOECHO) $(ECHO) '<SOFTPKG NAME="$(DISTNAME)" VERSION="0.000007">' > $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <ABSTRACT>Create init scripts in Perl</ABSTRACT>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <AUTHOR>SymKat I&lt;&lt;symkat@symkat.com&gt;&gt; ( Blog: L&lt;http://symkat.com/&gt; )</AUTHOR>' >> $(DISTNAME).ppd
 	$(NOECHO) $(ECHO) '    <IMPLEMENTATION>' >> $(DISTNAME).ppd
