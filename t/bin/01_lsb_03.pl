@@ -10,19 +10,13 @@ Daemon::Control->new({
     lsb_sdesc   => 'My Daemon Short',
     lsb_desc    => 'My Daemon controls the My Daemon daemon.',
     path        => '/usr/sbin/mydaemon/init.pl',
+    init_code   => "Test This\nOne Block",
 
-    program     => sub {
-        if ( ref $_[0] ne 'Daemon::Control' ) {
-            print "FAILED\n";
-        }
-    },
-    program_args => [ ],
+    program     => sub { sleep shift },
+    program_args => [ 10 ],
 
-    redirect_before_fork => 0,
-    pid_file    => '/dev/null', # I don't want to leave tmp files for testing.
+    pid_file    => '/tmp/mydaemon.pid',
     stderr_file => '/dev/null',
     stdout_file => '/dev/null',
-
-    fork        => 2,
 
 })->run;

@@ -5,6 +5,7 @@ inc/Module/Install/Can.pm
 inc/Module/Install/Fetch.pm
 inc/Module/Install/Makefile.pm
 inc/Module/Install/Metadata.pm
+inc/Module/Install/Repository.pm
 inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 lib/Daemon/Control.pm
@@ -13,6 +14,7 @@ MANIFEST			This list of files
 META.yml
 t/00_load.t
 t/01_lsb_file.t
+t/01_lsb_file_with_init_code.t
 t/01_lsb_file_with_init_config.t
 t/02_sleep_perl.t
 t/02_sleep_system.t
@@ -20,6 +22,7 @@ t/03_perl_gets_control.t
 t/04_show_warnings.t
 t/bin/01_lsb.pl
 t/bin/01_lsb_02.pl
+t/bin/01_lsb_03.pl
 t/bin/02_sleep_perl.pl
 t/bin/02_sleep_system.pl
 t/bin/03_perl_gets_control.pl
