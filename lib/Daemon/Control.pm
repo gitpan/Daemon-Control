@@ -8,7 +8,7 @@ use File::Path qw( make_path );
 use Cwd 'abs_path';
 require 5.008001; # Supporting 5.8.1+
 
-our $VERSION = '0.001000'; # 0.1.0
+our $VERSION = '0.001001'; # 0.1.1
 $VERSION = eval $VERSION;
 
 my @accessors = qw(
@@ -16,6 +16,7 @@ my @accessors = qw(
     uid path gid scan_name stdout_file stderr_file pid_file fork data
     lsb_start lsb_stop lsb_sdesc lsb_desc redirect_before_fork init_config
     kill_timeout umask resource_dir help init_code
+    prereq_no_process
 );
 
 my $cmd_opt = "[start|stop|restart|reload|status|show_warnings|get_init_file|help]";
@@ -92,7 +93,7 @@ sub new {
 sub _set_uid_from_name {
     my ( $self, $name ) = @_;
     my $uid = getpwnam( $name );
-    die "Error: Couldn't get uid for non-existant user " . $self->user
+    die "Error: Couldn't get uid for non-existent user " . $self->user
         unless $uid;
     $self->trace( "Set UID => $uid" );
     $self->uid( $uid );
@@ -102,7 +103,7 @@ sub _set_uid_from_name {
 sub _set_gid_from_name {
     my ( $self, $name ) = @_;
     my $gid = getgrnam( $name );
-    die "Error: Couldn't get gid for non-existant group " . $self->group
+    die "Error: Couldn't get gid for non-existent group " . $self->group
         unless $gid;
     $self->trace( "Set GID => $gid" );
     $self->gid( $gid );
@@ -131,16 +132,22 @@ sub redirect_filehandles {
 
 sub _create_resource_dir {
     my ( $self ) = @_;
+    $self->_create_dir($self->resource_dir);
+}
 
-    return 0 unless $self->resource_dir;
+sub _create_dir {
+    my ( $self, $dir ) = @_;
 
-    if ( -d $self->resource_dir ) {
-        $self->trace( "Resource dir exists (" . $self->resource_dir . ")" );
+    return 0 unless defined $dir;
+    return 1 unless length($dir);
+
+    if ( -d $dir ) {
+        $self->trace( "Dir exists (" . $dir . ") - no need to create" );
         return 1;
     }
 
     my ( $created ) = make_path(
-        $self->resource_dir,
+        $dir,
         {
             uid => $self->uid,
             group => $self->gid,
@@ -155,14 +162,13 @@ sub _create_resource_dir {
         }
     }
 
-    if ( $created eq $self->resource_dir ) {
-        $self->trace( "Created resource dir (" . $self->resource_dir . ")" );
+    if ( $created eq $dir ) {
+        $self->trace( "Created dir (" . $dir . ")" );
         return 1;
     }
 
-    $self->trace( "_create_resource_dir() failed and I don't know why" );
+    $self->trace( "_create_dir() for $dir failed and I don't know why" );
     return 0;
-
 }
 
 sub _double_fork {
@@ -183,13 +189,12 @@ sub _double_fork {
             if ( $self->uid ) {
                 setuid( $self->uid );
 
-                # We cannot devine a username if one isn't set.
-                $ENV{USER} = $self->user if $self->user;
+                $ENV{USER} = $self->user || getpwuid($self->uid);
                 $ENV{HOME} = ((getpwuid($self->uid))[7]);
 
                 $self->trace( "setuid(" . $self->uid . ")" );
-                $self->trace( "\$ENV{HOME} => " . ((getpwuid($self->uid))[7]) );
-                $self->trace( "\$ENV{USER} => " . $self->user ) if $self->user;
+                $self->trace( "\$ENV{USER} => " . $ENV{USER} );
+                $self->trace( "\$ENV{HOME} => " . $ENV{HOME} );
             }
 
             if ( $self->umask ) {
@@ -243,19 +248,20 @@ sub _launch_program {
         $self->trace( "chdir(" . $self->directory . ")" );
     }
 
+    my @args = @{$self->program_args || [ ]};
+
     if ( ref $self->program eq 'CODE' ) {
-        $self->program->( $self, @{$self->program_args || []} );
+        $self->program->( $self, @args );
     } else {
-        exec ( $self->program, @{$self->program_args || [ ]} )
+        exec ( $self->program, @args )
             or die "Failed to exec " . $self->program . " "
-                . join( " ", @{$self->program_args} ) . ": $!";
+                . join( " ", @args ) . ": $!";
     }
     exit 0;
 }
 
 sub write_pid {
     my ( $self ) = @_;
-
 
     # Create the PID file as the user we currently are,
     # and change the permissions to our target UID/GID.
@@ -270,10 +276,15 @@ sub write_pid {
 
 sub _write_pid {
     my ( $self ) = @_;
+
+    my ($volume, $dir, $file) = File::Spec->splitpath($self->pid_file);
+    return 0 if not $self->_create_dir($dir);
+
     open my $sf, ">", $self->pid_file
         or die "Failed to write " . $self->pid_file . ": $!";
     print $sf $self->pid;
     close $sf;
+    $self->trace( "Wrote pid (" . $self->pid . ") to pid file (" . $self->pid_file . ")" );
     return $self;
 }
 
@@ -316,11 +327,32 @@ sub pid_running {
     return kill 0, $self->pid;
 }
 
+sub process_running {
+    my ( $self, $pattern ) = @_;
+
+    my $psopt = $^O =~ m/bsd$/ ? '-ax' : '-u ' . $self->user;
+    my $ps = `LC_ALL=C command ps $psopt -o pid,args`;
+    $ps =~ s/^\s+//mg;
+    my @pids;
+    for my $line (split /\n/, $ps)
+    {
+        next if $line =~ m/^\D/;
+        my ($pid, $command, $args) = split /\s+/, $line, 3;
+
+        next if $pid eq $$;
+        push @pids, $pid
+          if $command =~ $pattern
+              or defined $args and $args =~ $pattern;
+    }
+    return @pids;
+}
+
 sub pretty_print {
     my ( $self, $message, $color ) = @_;
 
     $color ||= "green"; # Green is no color.
     my $code = $self->color_map->{$color} ||= "32"; # Green is invalid.
+    local $| = 1;
     printf( "%-49s %30s\n", $self->name, "\033[$code" ."m[$message]\033[0m" );
 }
 
@@ -328,6 +360,21 @@ sub pretty_print {
 
 sub do_start {
     my ( $self ) = @_;
+
+    # Optionally check if a process is already running with the same name
+    if ($self->prereq_no_process)
+    {
+        my $program = $self->program;
+        my $pattern = $self->prereq_no_process eq '1'
+            ? qr/\b${program}\b/
+            : $self->prereq_no_process;
+        my @pids = $self->process_running($pattern);
+        if (@pids)
+        {
+            $self->pretty_print( 'Duplicate Running? (pid ' . join(', ', @pids) . ')', "red" );
+            exit 1;
+        }
+    }
 
     # Make sure the PID file exists.
     if ( ! -f $self->pid_file ) {
@@ -373,8 +420,16 @@ sub do_stop {
 
     if ( $self->pid && $self->pid_running ) {
         foreach my $signal ( qw(TERM TERM INT KILL) ) {
+            $self->trace( "Sending $signal signal to pid ", $self->pid, "..." );
             kill $signal => $self->pid;
-            sleep $self->kill_timeout;
+
+            for (1..$self->kill_timeout)
+            {
+                # abort early if the process is now stopped
+                $self->trace('checking if pid ', $self->pid, ' is still running...');
+                last if not $self->pid_running;
+                sleep 1;
+            }
             last unless $self->pid_running;
         }
         if ( $self->pid_running ) {
@@ -765,6 +820,22 @@ This directory will be created, and chowned to the user/group provided in
 C<user>, and C<group>.
 
     $daemon->resource_dir( "/var/run/mydaemon" );
+
+=head2 prereq_no_process -- EXPERIMENTAL
+
+This option is EXPERIMENTAL and defaults to OFF.
+
+If this is set, then the C<ps> list will be checked at startup for any
+processes that look like the daemon to be started.  By default the pattern used
+is C<< /\b<program name>\b/ >>, but you can pass an override regexp in this field
+instead (to use the default pattern, just pass C<< prereq_no_process => 1 >>).
+If matching processes are found, those pids are output, and the daemon will not
+start.
+
+This may produce some false positives on your system, depending on what else is
+running on your system, but it may still be of some use, e.g. if you seem to
+have daemons left running where the associated pid file is getting deleted
+somehow.
 
 =head2 fork
 

@@ -4,7 +4,7 @@ author:
   - '=over 4'
 build_requires:
   ExtUtils::MakeMaker: 6.59
-  Test::More: 0.42
+  Test::More: 0.88
 configure_requires:
   ExtUtils::MakeMaker: 6.59
 distribution_type: module
@@ -28,4 +28,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: git://github.com/symkat/Daemon-Control.git
-version: 0.001000
+version: 0.001001
