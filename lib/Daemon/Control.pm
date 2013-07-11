@@ -8,7 +8,7 @@ use File::Path qw( make_path );
 use Cwd 'abs_path';
 require 5.008001; # Supporting 5.8.1+
 
-our $VERSION = '0.001001'; # 0.1.1
+our $VERSION = '0.001002'; # 0.1.2
 $VERSION = eval $VERSION;
 
 my @accessors = qw(
@@ -94,7 +94,7 @@ sub _set_uid_from_name {
     my ( $self, $name ) = @_;
     my $uid = getpwnam( $name );
     die "Error: Couldn't get uid for non-existent user " . $self->user
-        unless $uid;
+        unless defined $uid;
     $self->trace( "Set UID => $uid" );
     $self->uid( $uid );
 }
@@ -104,7 +104,7 @@ sub _set_gid_from_name {
     my ( $self, $name ) = @_;
     my $gid = getgrnam( $name );
     die "Error: Couldn't get gid for non-existent group " . $self->group
-        unless $gid;
+        unless defined $gid;
     $self->trace( "Set GID => $gid" );
     $self->gid( $gid );
 
@@ -235,7 +235,9 @@ sub _fork {
     } elsif ( not defined $pid ) {
         warn "Cannot fork: $!";
     } else { # In the parent, $pid = child's PID, return it.
-        # Nothing
+        $self->pid( $pid );
+        $self->trace("Set PID => $pid" );
+        $self->write_pid;
     }
     return $self;
 }
@@ -614,6 +616,8 @@ else
     exit 1;
 fi
 __END__
+
+=encoding utf8
 
 =head1 NAME
 
@@ -995,6 +999,8 @@ Kaitlyn Parkhurst (SymKat) I<E<lt>symkat@symkat.comE<gt>> ( Blog: L<http://symka
 =item * Mike Doherty (doherty) I<E<lt>doherty@cpan.orgE<gt>>
 
 =item * Karen Etheridge (ether) I<E<lt>ether@cpan.orgE<gt>>
+
+=item * Ævar Arnfjörð Bjarmason (avar) I<E<lt>avar@cpan.orgE<gt>>
 
 =back
 
