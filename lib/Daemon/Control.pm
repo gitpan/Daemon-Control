@@ -8,7 +8,7 @@ use File::Path qw( make_path );
 use Cwd 'abs_path';
 require 5.008001; # Supporting 5.8.1+
 
-our $VERSION = '0.001004'; # 0.1.4
+our $VERSION = '0.001005'; # 0.1.5
 $VERSION = eval $VERSION;
 
 my @accessors = qw(
@@ -16,7 +16,7 @@ my @accessors = qw(
     uid path gid scan_name stdout_file stderr_file pid_file fork data
     lsb_start lsb_stop lsb_sdesc lsb_desc redirect_before_fork init_config
     kill_timeout umask resource_dir help init_code
-    prereq_no_process
+    prereq_no_process foreground
 );
 
 my $cmd_opt = "[start|stop|restart|reload|status|show_warnings|get_init_file|help]";
@@ -62,7 +62,9 @@ sub group {
 }
 
 sub new {
-    my ( $class, $args ) = @_;
+    my ( $class, @in ) = @_;
+
+    my $args = ref $in[0] eq 'HASH' ? $in[0] : { @in };
 
     # Create the object with defaults.
     my $self = bless {
@@ -71,6 +73,7 @@ sub new {
         kill_timeout            => 1,
         quiet                   => 0,
         umask                   => 0,
+        foreground              => 0,
     }, $class;
 
     for my $accessor ( @accessors ) {
@@ -82,6 +85,12 @@ sub new {
     # Set the user/groups.
     $self->user(delete $args->{user}) if exists $args->{user};
     $self->group(delete $args->{group}) if exists $args->{group};
+
+    # Shortcut caused by setting foreground or using the ENV to do it.
+    if ( ( $self->foreground == 1 ) || ( $ENV{DC_FOREGROUND} ) ) {
+        $self->fork( 0 );
+        $self->quiet( 1 );
+    }
 
     die "Unknown arguments to the constructor: " . join( " ", keys %$args )
         if keys( %$args );
@@ -226,6 +235,8 @@ sub _double_fork {
     return $self;
 }
 
+sub _foreground { shift->_launch_program } 
+
 sub _fork {
     my ( $self ) = @_;
     my $pid = fork();
@@ -260,7 +271,7 @@ sub _launch_program {
             or die "Failed to exec " . $self->program . " "
                 . join( " ", @args ) . ": $!";
     }
-    exit 0;
+    return 0;
 }
 
 sub write_pid {
@@ -363,6 +374,15 @@ sub pretty_print {
 
 # Callable Functions
 
+sub do_foreground {
+    my ( $self ) = @_;
+
+    # Short cut to...
+    $self->fork( 0 );
+    $self->quiet( 1 );
+    return $self->do_start;
+}
+
 sub do_start {
     my ( $self ) = @_;
 
@@ -377,7 +397,7 @@ sub do_start {
         if (@pids)
         {
             $self->pretty_print( 'Duplicate Running? (pid ' . join(', ', @pids) . ')', "red" );
-            exit 1;
+            return  1;
         }
     }
 
@@ -391,15 +411,17 @@ sub do_start {
     $self->read_pid;
     if ( $self->pid && $self->pid_running ) {
         $self->pretty_print( "Duplicate Running", "red" );
-        exit 1;
+        return 1;
     }
 
     $self->_create_resource_dir;
 
-    $self->fork( 2 ) unless $self->fork;
+    $self->fork( 2 ) unless defined $self->fork;
     $self->_double_fork if $self->fork == 2;
     $self->_fork if $self->fork == 1;
+    $self->_foreground if $self->fork == 0;
     $self->pretty_print( "Started" );
+    return 0;
 }
 
 sub do_show_warnings {
@@ -425,7 +447,7 @@ sub do_stop {
     my $start_pid = $self->pid;
 
     # Probably don't want to send anything to init(1).
-    return unless $start_pid > 1;
+    return 1 unless $start_pid > 1;
 
     if ( $self->pid_running($start_pid) ) {
         SIGNAL:
@@ -444,7 +466,7 @@ sub do_stop {
         }
         if ( $self->pid_running($start_pid) ) {
             $self->pretty_print( "Failed to Stop", "red" );
-            exit 1;
+            return 1;
         }
         $self->pretty_print( "Stopped" );
     } else {
@@ -459,6 +481,7 @@ sub do_stop {
     if ( $self->pid_file ) {
       unlink($self->pid_file) if $self->read_pid == $start_pid;
     }
+    return 0;
 }
 
 sub do_restart {
@@ -469,6 +492,7 @@ sub do_restart {
         $self->do_stop;
     }
     $self->do_start;
+    return 0;
 }
 
 sub do_status {
@@ -477,8 +501,10 @@ sub do_status {
 
     if ( $self->pid && $self->pid_running ) {
         $self->pretty_print( "Running" );
+        return 0;
     } else {
         $self->pretty_print( "Not Running", "red" );
+        return 3;
     }
 }
 
@@ -489,13 +515,16 @@ sub do_reload {
     if ( $self->pid && $self->pid_running  ) {
         kill "SIGHUP", $self->pid;
         $self->pretty_print( "Reloaded" );
+        return 0;
     } else {
         $self->pretty_print( "Not Running", "red" );
+        return 1;
     }
 }
 
 sub do_get_init_file {
     shift->dump_init_script;
+    return 0;
 }
 
 sub do_help {
@@ -503,6 +532,7 @@ sub do_help {
 
     print "Syntax: $0 $cmd_opt\n\n";
     print $self->help if $self->help;
+    return 0;
 }
 
 sub dump_init_script {
@@ -551,10 +581,11 @@ sub run_template {
     return $content;
 }
 
-# Application Code.
-sub run {
-    my ( $self ) = @_;
 
+
+sub run_command {
+    my ( $self, $arg ) = @_;
+    
     # Error Checking.
     if ( ! $self->program ) {
         die "Error: program must be defined.";
@@ -566,30 +597,33 @@ sub run {
         die "Error: name must be defined.";
     }
 
+    # Grab the GID if we have a UID but no GID.
     if ( $self->uid && ! $self->gid ) {
         my ( $gid ) = ( (getpwuid( $self->uid ))[3] );
         $self->gid( $gid );
         $self->trace( "Implicit GID => $gid" );
     }
-
-    my $called_with;
-    if (@ARGV) {
-        $called_with = shift @ARGV;
-        $called_with =~ s/^[-]+//g; # Allow people to do --command too.
-    }
+    
+    my $called_with = $arg || "help";
+    $called_with =~ s/^[-]+//g; # Allow people to do --command too.
 
     my $action = "do_" . ($called_with ? $called_with : "" );
 
     my $allowed_actions = "Must be called with an action: $cmd_opt";
 
     if ( $self->can($action) ) {
-        $self->$action;
+        return $self->$action;
     } elsif ( ! $called_with  ) {
         die $allowed_actions
     } else {
         die "Error: undefined action $called_with.  $allowed_actions";
     }
-    exit 0;
+
+}
+
+# Application Code.
+sub run {
+    shift->run_command( @ARGV );
 }
 
 sub trace {
@@ -657,7 +691,7 @@ Write a program that describes the daemon:
     use strict;
     use Daemon::Control;
 
-    Daemon::Control->new({
+    Daemon::Control->new(
         name        => "My Daemon",
         lsb_start   => '$syslog $remote_fs',
         lsb_stop    => '$syslog',
@@ -674,7 +708,17 @@ Write a program that describes the daemon:
 
         fork        => 2,
 
-    })->run;
+    )->run;
+
+By default C<run> will use @ARGV for the action, and exit with an LSB compatible
+exit code.  For finer control, you can use C<run_command>, which will return
+the exit code, and accepts the action as an argument.  This enables more programatic
+control, as well as running multiple instances of M<Daemon::Control> from one script.
+
+    my $daemon = Daemon::Control->new(
+        ...
+    );
+    my $exit = $daemon->run_command(“start”);
 
 You can then call the program:
 
@@ -684,9 +728,11 @@ You can also make an LSB compatible init script:
 
     /home/symkat/etc/init.d/program get_init_file > /etc/init.d/program
 
+
+
 =head1 CONSTRUCTOR
 
-The constructor takes the following arguments.
+The constructor takes the following arguments as a list or a hash ref.
 
 =head2 name
 
@@ -868,6 +914,15 @@ and do all that fun stuff.  This mode is recommended when the program you want
 to control has its own daemonizing code.  It is important to note that the PID
 file should be set to whatever PID file is used by the daemon.
 
+In no-fork mode, <Cfork(0)>, the program is run in the foreground.  By default
+quiet is still turned off, so status updates will be shown on the screen such
+as that the daemon started.  A shortcut to turn status off and go into foreground
+mode is C<foreground> being set to 1, or C<DC_FOREGROUND> being set as an
+environment variable.  Additionally, calling C<foreground> instead of C<start> will
+override the forking mode at run-time.
+    
+    $daemon->fork( 0 );
+
     $daemon->fork( 1 );
 
     $daemon->fork( 2 ); # Default
@@ -930,12 +985,21 @@ If this boolean flag is set to a true value all output from the init script
 
 =head1 METHODS
 
+=head2 run_command
+
+This function will process an action on the Daemon::Control instance.
+Valid arguments are those which a C<do_> method exists for, such as 
+B<start>, B<stop>, B<restart>.  Returns the LSB exit code for the
+action processed.
+
 =head2 run
 
 This will make your program act as an init file, accepting input from
-the command line.  Run will exit with either 1 or 0, following LSB files on
-exiting.  As such no code should be used after ->run is called.  Any code
-in your file should be before this.
+the command line.  Run will exit with 0 for success and uses LSB exit
+codes.  As such no code should be used after ->run is called.  Any code
+in your file should be before this.  This is a shortcut for 
+
+    exit Daemon::Control->new(...)->run_command( @ARGV );
 
 =head2 do_start
 
@@ -943,6 +1007,15 @@ Is called when start is given as an argument.  Starts the forking and
 exits. Called by:
 
     /usr/bin/my_program_launcher.pl start
+
+=head2 do_foreground
+
+Is called when B<foreground> is given as an argument.  Starts the 
+program or code reference and stays in the foreground -- no forking
+is done, regardless of the compile-time arguments.  Additionally,
+turns C<quiet> on to avoid showing M<Daemon::Control> output.
+
+    /usr/bin/my_program_launcher.pl foreground
 
 =head2 do_stop
 
